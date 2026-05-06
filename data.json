@@ -1,0 +1,21 @@
+{
+  "settings": {
+    "teamMembers": [
+      "Javier Garcés",
+      "Adriana",
+      "Ismael",
+      "Carlos",
+      "María"
+    ],
+    "segments": [
+      "WoW",
+      "Internal",
+      "PR",
+      "Commercial"
+    ],
+    "defaultRequestor": "Javier Garcés",
+    "updatedAt": "2024-03-20T08:00:00.000Z"
+  },
+  "meetings": [],
+  "items": []
+}

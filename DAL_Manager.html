@@ -1,0 +1,1184 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DAL Meeting Manager</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-deep: #0b1326;
+            --bg-surface: #0b1326;
+            --bg-container: #171f33;
+            --bg-raised: #2d3449;
+            --border: rgba(134, 147, 151, 0.15);
+            --text-main: #dae2fd;
+            --text-dim: #bcc9cd;
+            --primary: #4cd7f6;
+            --primary-container: #06b6d4;
+            --secondary: #c0c1ff;
+            --tertiary: #3cddc7;
+            
+            --priority-high: #ffb4ab;
+            --priority-med: #f59e0b;
+            --priority-low: #3cddc7;
+            
+            --status-espera: #4cd7f6;
+            --status-wip: #c0c1ff;
+            --status-hecha: #3cddc7;
+            --status-cancelada: #869397;
+
+            --glass: rgba(45, 52, 73, 0.6);
+            --glass-blur: blur(24px);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background: var(--bg-deep); 
+            color: var(--text-main);
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+            letter-spacing: -0.01em;
+        }
+
+        /* Sidebar */
+        aside {
+            width: 280px;
+            background: var(--glass);
+            backdrop-filter: var(--glass-blur);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            padding: 2rem 1.5rem;
+        }
+        .logo { 
+            font-size: 1.5rem; font-weight: 600; color: var(--primary); margin-bottom: 2.5rem; 
+            letter-spacing: -0.03em; text-transform: uppercase;
+        }
+        nav { flex: 1; }
+        .nav-item {
+            display: flex;
+            align-items: center;
+            padding: 0.85rem 1rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            color: var(--text-dim);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            font-size: 0.95rem;
+        }
+        .nav-item:hover {
+            background: rgba(76, 215, 246, 0.08);
+            color: var(--primary);
+        }
+        .nav-item.active { 
+            background: rgba(76, 215, 246, 0.12); 
+            color: var(--primary);
+            box-shadow: inset 0 0 0 1px rgba(76, 215, 246, 0.2);
+        }
+
+        /* Main Content */
+        main { flex: 1; overflow-y: auto; padding: 3rem; position: relative; scroll-behavior: smooth; }
+        header { 
+            display: flex; justify-content: space-between; align-items: center; margin-bottom: 3rem;
+            position: sticky; top: -3rem; background: var(--bg-deep); padding: 1.5rem 0; z-index: 10;
+        }
+        header h1 { font-size: 2rem; font-weight: 600; letter-spacing: -0.02em; }
+
+        .btn {
+            background: linear-gradient(135deg, var(--primary), var(--primary-container));
+            color: #003640; border: none; padding: 0.75rem 1.5rem;
+            border-radius: 8px; cursor: pointer; font-weight: 600; font-family: inherit;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 4px 12px rgba(6, 182, 212, 0.2);
+        }
+        .btn:hover { 
+            transform: translateY(-1px);
+            box-shadow: 0 6px 16px rgba(6, 182, 212, 0.3);
+        }
+        .btn-outline { 
+            background: transparent; 
+            border: 1px solid var(--border); 
+            color: var(--text-main);
+            box-shadow: none;
+        }
+        .btn-outline:hover { background: rgba(255,255,255,0.05); transform: none; }
+
+        /* Persistence Banner */
+        #persistence-banner {
+            position: fixed; bottom: 1.5rem; right: 1.5rem; background: var(--bg-raised);
+            padding: 0.75rem 1.25rem; border-radius: 12px; border: 1px solid var(--border);
+            display: flex; align-items: center; gap: 0.75rem; font-size: 0.85rem; z-index: 100;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+        }
+        .dot { height: 10px; width: 10px; border-radius: 50%; background: var(--text-dim); transition: background 0.3s; }
+        .dot.connected { background: var(--tertiary); box-shadow: 0 0 8px var(--tertiary); }
+        .dot.saving { background: #f59e0b; animation: pulse 1s infinite; box-shadow: 0 0 8px #f59e0b; }
+
+        @keyframes pulse { 0% { opacity: 0.4; transform: scale(0.95); } 50% { opacity: 1; transform: scale(1.1); } 100% { opacity: 0.4; transform: scale(0.95); } }
+
+        /* Modal */
+        #modal-overlay {
+            position: fixed; inset: 0; background: rgba(6, 14, 32, 0.8); backdrop-filter: blur(8px);
+            display: none; justify-content: center; align-items: center; z-index: 1000;
+        }
+        .modal {
+            background: var(--bg-raised); padding: 2.5rem; border-radius: 1.25rem; width: 640px;
+            max-width: 95vw; border: 1px solid var(--border);
+            box-shadow: 0 24px 64px rgba(0,0,0,0.6);
+            transition: max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .modal.wide { width: 950px; }
+        .form-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 2.5rem; }
+        @media (max-width: 850px) { 
+            .form-grid { grid-template-columns: 1fr; gap: 1rem; } 
+            .modal.wide { width: 95vw; }
+        }
+        .form-group { margin-bottom: 1.5rem; }
+        label { display: block; margin-bottom: 0.6rem; color: var(--text-dim); font-size: 0.85rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }
+        input, select, textarea {
+            width: 100%; padding: 0.85rem; background: var(--bg-deep); border: 1px solid var(--border);
+            color: white; border-radius: 8px; font-family: inherit; font-size: 1rem;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        input:focus, select:focus, textarea:focus {
+            outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px rgba(76, 215, 246, 0.15);
+        }
+
+        /* Views */
+        .view { display: none; }
+        .view.active { display: block; animation: fadeIn 0.4s ease-out; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .items-table { width: 100%; border-collapse: separate; border-spacing: 0 0.5rem; margin-top: 1rem; }
+        th { text-align: left; color: var(--text-dim); padding: 1rem; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.1em; font-weight: 600; }
+        td { 
+            padding: 1.25rem 1rem; background: var(--bg-container); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+            vertical-align: middle; 
+        }
+        td:first-child { border-left: 1px solid var(--border); border-radius: 12px 0 0 12px; }
+        td:last-child { border-right: 1px solid var(--border); border-radius: 0 12px 12px 0; }
+        
+        .priority-pill { 
+            padding: 0.35rem 0.75rem; border-radius: 2rem; font-size: 0.7rem; font-weight: 700; 
+            text-transform: uppercase; letter-spacing: 0.05em;
+        }
+        .status-pill { 
+            display: inline-flex; align-items: center; gap: 0.5rem;
+            background: rgba(255,255,255,0.05); border: 1px solid var(--border); 
+            padding: 0.4rem 0.85rem; border-radius: 2rem; font-size: 0.85rem; cursor: pointer;
+            transition: all 0.2s;
+        }
+        .status-pill:hover { background: rgba(255,255,255,0.1); border-color: var(--primary); }
+
+        /* Board */
+        .board-container { display: flex; gap: 2rem; overflow-x: auto; padding-bottom: 2rem; }
+        .board-col { width: 340px; flex-shrink: 0; }
+        .board-col h3 { 
+            margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center;
+            font-size: 1.1rem; color: var(--text-dim);
+        }
+        .card { 
+            background: var(--bg-container); padding: 1.5rem; border-radius: 1rem; border: 1px solid var(--border); 
+            margin-bottom: 1.25rem; cursor: pointer; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative; overflow: hidden;
+        }
+        .card:hover { 
+            border-color: var(--primary); transform: translateY(-4px) scale(1.02);
+            box-shadow: 0 12px 32px rgba(0,0,0,0.3);
+        }
+        .card::before {
+            content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%;
+            background: var(--primary); opacity: 0; transition: opacity 0.3s;
+        }
+        .card:hover::before { opacity: 1; }
+
+    </style>
+</head>
+<body>
+    <aside>
+        <div class="logo">DAL Manager</div>
+        <nav id="sidebar-nav"></nav>
+        <button class="btn btn-outline" id="btn-folder" style="width: 100%; margin-top: 2rem;">📁 Abrir Carpeta</button>
+    </aside>
+
+    <main>
+        <header>
+            <h1 id="view-title">Dashboard</h1>
+            <div id="view-actions"></div>
+        </header>
+
+        <section id="view-dashboard" class="view active">
+            <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem;">
+                <div class="card"><h3>Cargando...</h3></div>
+            </div>
+        </section>
+
+        <section id="view-meetings" class="view"></section>
+        <section id="view-items" class="view"></section>
+        <section id="view-board" class="view"></section>
+        <section id="view-report" class="view"></section>
+        
+        <section id="view-settings" class="view">
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 2.5rem;">
+                <div class="card">
+                    <h2 style="margin-bottom:1.5rem">Responsables (PIC)</h2>
+                    <div id="settings-pics-list" style="display:flex; flex-wrap:wrap; gap:0.75rem; margin-bottom:1.5rem"></div>
+                    <div style="display:flex; gap:0.5rem">
+                        <input type="text" id="new-pic-name" placeholder="Nuevo responsable...">
+                        <button class="btn" onclick="App.logic.addPIC()">Añadir</button>
+                    </div>
+                </div>
+                <div class="card">
+                    <h2 style="margin-bottom:1.5rem">Segmentos</h2>
+                    <div id="settings-segments-list" style="display:flex; flex-wrap:wrap; gap:0.75rem; margin-bottom:1.5rem"></div>
+                    <div style="display:flex; gap:0.5rem">
+                        <input type="text" id="new-segment-name" placeholder="Nuevo segmento...">
+                        <button class="btn" onclick="App.logic.addSegment()">Añadir</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <div id="persistence-banner">
+        <span class="dot" id="sync-dot"></span>
+        <span id="sync-text">Carpeta no conectada</span>
+    </div>
+
+    <div id="modal-overlay">
+        <div class="modal" id="modal-content"></div>
+    </div>
+
+    <script>
+        /**
+         * Serverless JSON Sync Services
+         */
+        class DataMergeService {
+            merge(localData, diskData) {
+                if (!localData) return diskData;
+                if (!diskData) return localData;
+
+                const merged = { ...localData };
+                const collections = ['meetings', 'items'];
+
+                collections.forEach(collection => {
+                    const localItems = localData[collection] || [];
+                    const diskItems = diskData[collection] || [];
+                    merged[collection] = this.mergeCollection(localItems, diskItems);
+                });
+
+                // Merge settings (Last-Write-Wins based on updatedAt)
+                const localSettings = localData.settings || {};
+                const diskSettings = diskData.settings || {};
+                const localTime = new Date(localSettings.updatedAt || 0).getTime();
+                const diskTime = new Date(diskSettings.updatedAt || 0).getTime();
+                
+                merged.settings = localTime >= diskTime ? localSettings : diskSettings;
+
+                return merged;
+            }
+
+            mergeCollection(localItems, diskItems) {
+                const mergedMap = new Map();
+                const allIds = new Set([...localItems.map(i => i.id), ...diskItems.map(i => i.id)]);
+
+                allIds.forEach(id => {
+                    const local = localItems.find(i => i.id === id);
+                    const disk = diskItems.find(i => i.id === id);
+
+                    if (local && disk) {
+                        const localTime = new Date(local.updatedAt || 0).getTime();
+                        const diskTime = new Date(disk.updatedAt || 0).getTime();
+                        mergedMap.set(id, localTime >= diskTime ? local : disk);
+                    } else if (local) {
+                        mergedMap.set(id, local);
+                    } else if (disk) {
+                        mergedMap.set(id, disk);
+                    }
+                });
+
+                return Array.from(mergedMap.values()).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+            }
+        }
+
+        class PersistenceManager {
+            constructor() {
+                this.filename = 'data.json';
+                this.handle = null;
+                this.mergeService = new DataMergeService();
+                this.saveTimeout = null;
+                this.isInitialLoad = true;
+                this.dbName = 'DAL_Persistence';
+                this.storeName = 'handles';
+            }
+
+            // Open IndexedDB for storing file handles
+            async openDB() {
+                return new Promise((resolve, reject) => {
+                    const req = indexedDB.open(this.dbName, 1);
+                    req.onupgradeneeded = () => req.result.createObjectStore(this.storeName);
+                    req.onsuccess = () => resolve(req.result);
+                    req.onerror = () => reject(req.error);
+                });
+            }
+
+            async storeHandle(handle) {
+                const db = await this.openDB();
+                const tx = db.transaction(this.storeName, 'readwrite');
+                tx.objectStore(this.storeName).put(handle, 'last-handle');
+            }
+
+            async getStoredHandle() {
+                const db = await this.openDB();
+                return new Promise((resolve) => {
+                    const req = db.transaction(this.storeName).objectStore(this.storeName).get('last-handle');
+                    req.onsuccess = () => resolve(req.result);
+                    req.onerror = () => resolve(null);
+                });
+            }
+
+            // Startup check
+            async startup() {
+                const saved = await this.getStoredHandle();
+                if (saved) {
+                    this.showReconnectModal(saved);
+                }
+            }
+
+            showReconnectModal(handle) {
+                const modal = document.getElementById('modal-overlay');
+                const content = document.getElementById('modal-content');
+                content.innerHTML = `
+                    <div style="text-align:center; padding: 1rem;">
+                        <div style="font-size: 3rem; margin-bottom: 1.5rem;">📂</div>
+                        <h2 style="margin-bottom:1rem">Reconectar Carpeta</h2>
+                        <p style="color:var(--text-dim); margin-bottom:2rem">Se ha detectado una carpeta previa: <br><strong style="color:var(--primary)">${handle.name}</strong></p>
+                        <div style="display:flex; flex-direction:column; gap:1rem">
+                            <button class="btn" onclick="App.db.init(true)">Confirmar y Conectar</button>
+                            <button class="btn btn-outline" onclick="App.db.init(false)">Elegir otra carpeta</button>
+                        </div>
+                    </div>
+                `;
+                modal.style.display = 'flex';
+            }
+
+            async init(useStored = false) {
+                try {
+                    let handle;
+                    if (useStored) {
+                        handle = await this.getStoredHandle();
+                        // Browser security requires re-requesting permission via user gesture
+                        const status = await handle.requestPermission({ mode: 'readwrite' });
+                        if (status !== 'granted') return;
+                    } else {
+                        handle = await window.showDirectoryPicker({ mode: 'readwrite' });
+                    }
+
+                    this.handle = handle;
+                    await this.storeHandle(handle);
+                    await this.loadData();
+                    
+                    document.getElementById('sync-dot').classList.add('connected');
+                    document.getElementById('sync-text').innerText = 'Sincronizado';
+                    
+                    // Periodic refresh every 60s
+                    setInterval(() => this.loadData(), 60000);
+                    
+                    App.render();
+                    App.ui.hideModal();
+                } catch (e) {
+                    console.error("Acceso denegado o cancelado", e);
+                }
+            }
+
+            scheduleSave() {
+                if (!this.handle) return;
+                
+                if (this.saveTimeout) clearTimeout(this.saveTimeout);
+                
+                document.getElementById('sync-dot').classList.add('saving');
+                document.getElementById('sync-text').innerText = 'Cambios pendientes...';
+                
+                // Reduced debounce to 2 seconds for better responsiveness, 
+                // while still preventing disk spam during rapid edits.
+                this.saveTimeout = setTimeout(() => this.saveData(), 2000);
+
+                // Warn user if they try to close/refresh while saving is pending
+                window.onbeforeunload = () => "Hay cambios pendientes de guardar. ¿Seguro que quieres salir?";
+            }
+
+            async loadData() {
+                if (!this.handle) return;
+                try {
+                    const fileHandle = await this.handle.getFileHandle(this.filename, { create: false });
+                    const file = await fileHandle.getFile();
+                    const text = await file.text();
+                    const diskData = JSON.parse(text);
+                    
+                    // Merge disk data into app state
+                    App.state = this.mergeService.merge(App.state, diskData);
+                    
+                    if (this.isInitialLoad) {
+                        this.isInitialLoad = false;
+                        App.render();
+                    }
+                } catch (e) {
+                    console.log("Archivo no encontrado o vacío, esperando primer guardado");
+                }
+            }
+
+            async saveData() {
+                if (!this.handle) return;
+                
+                try {
+                    // 1. Read before write (to minimize overwrite risk)
+                    let diskData = null;
+                    try {
+                        const fh = await this.handle.getFileHandle(this.filename);
+                        const f = await fh.getFile();
+                        diskData = JSON.parse(await f.text());
+                    } catch (e) {}
+
+                    // 2. Merge current state with disk data
+                    const finalData = this.mergeService.merge(App.state, diskData);
+
+                    // 3. Optimization: Check if effectively different
+                    if (diskData && JSON.stringify(finalData) === JSON.stringify(diskData)) {
+                        console.log("Sin cambios detectados en el disco, omitiendo escritura");
+                        document.getElementById('sync-dot').classList.remove('saving');
+                        document.getElementById('sync-text').innerText = 'Sincronizado';
+                        return;
+                    }
+
+                    // 4. Write to disk
+                    const fileHandle = await this.handle.getFileHandle(this.filename, { create: true });
+                    const writable = await fileHandle.createWritable();
+                    await writable.write(JSON.stringify(finalData, null, 2));
+                    await writable.close();
+                    
+                    document.getElementById('sync-dot').classList.remove('saving');
+                    document.getElementById('sync-text').innerText = 'Sincronizado';
+                    console.log("Guardado exitoso");
+                    
+                    // Clear the exit warning
+                    window.onbeforeunload = null;
+                } catch (e) {
+                    console.error("Error al guardar", e);
+                    document.getElementById('sync-text').innerText = 'Error al guardar';
+                }
+            }
+        }
+
+        /**
+         * DAL MEETING MANAGER - CORE ENGINE
+         */
+        const App = {
+            state: {
+                settings: { 
+                    teamMembers: ["Javier Garcés", "Adriana", "Ismael", "Carlos", "María"],
+                    segments: ["WoW", "Internal", "PR", "Commercial"],
+                    defaultRequestor: "Javier Garcés",
+                    updatedAt: 0
+                },
+                meetings: [],
+                items: [],
+                activeView: 'dashboard',
+                selectedMeetingId: null,
+                reportFilters: { pic: 'ALL_MEMBERS', status: 'ALL_STATUS' },
+                viewFilters: { showCompleted: true }
+            },
+
+            db: new PersistenceManager(),
+
+            // Routing
+            router(view, id = null) {
+                App.state.activeView = view;
+                App.state.selectedMeetingId = id;
+                document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+                const viewEl = document.getElementById('view-' + view);
+                if (viewEl) viewEl.classList.add('active');
+                App.render();
+            },
+
+            // Render Engine
+            render() {
+                // Nav
+                const nav = document.getElementById('sidebar-nav');
+                const icons = {
+                    dashboard: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>',
+                    meetings: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>',
+                    items: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>',
+                    board: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>',
+                    report: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>',
+                    settings: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>'
+                };
+
+                nav.innerHTML = `
+                    <div class="nav-item ${App.state.activeView === 'dashboard' ? 'active' : ''}" onclick="App.router('dashboard')">${icons.dashboard}<span style="margin-left:12px">Dashboard</span></div>
+                    <div class="nav-item ${App.state.activeView === 'meetings' ? 'active' : ''}" onclick="App.router('meetings')">${icons.meetings}<span style="margin-left:12px">Reuniones</span></div>
+                    <div class="nav-item ${App.state.activeView === 'items' ? 'active' : ''}" onclick="App.router('items')">${icons.items}<span style="margin-left:12px">Lista de Acciones</span></div>
+                    <div class="nav-item ${App.state.activeView === 'board' ? 'active' : ''}" onclick="App.router('board')">${icons.board}<span style="margin-left:12px">Panel por Equipo</span></div>
+                    <div class="nav-item ${App.state.activeView === 'report' ? 'active' : ''}" onclick="App.router('report')">${icons.report}<span style="margin-left:12px">Reportes</span></div>
+                    <div class="nav-item ${App.state.activeView === 'settings' ? 'active' : ''}" onclick="App.router('settings')">${icons.settings}<span style="margin-left:12px">Configuración</span></div>
+                `;
+
+                // View Title & Actions
+                const titleMap = { dashboard: 'Resumen Semanal', meetings: 'Historial de Reuniones', items: 'Lista de Acciones', board: 'Panel de Seguimiento', report: 'Tareas por Persona', settings: 'Configuración de Sistema' };
+                document.getElementById('view-title').innerText = titleMap[App.state.activeView] || App.state.activeView;
+                
+                const actions = document.getElementById('view-actions');
+                actions.innerHTML = '';
+                
+                if (App.state.activeView === 'meetings') {
+                    actions.innerHTML = '<button class="btn" onclick="App.ui.showNewMeeting()">+ Nueva Reunión</button>';
+                    App.ui.renderMeetings();
+                } else if (App.state.activeView === 'items') {
+                    actions.innerHTML = `
+                        <div style="display:flex; align-items:center; gap:12px; height: 100%">
+                            <button class="btn" onclick="App.ui.showNewItem()">+ Nuevo Item</button>
+                            <button class="btn ${!App.state.viewFilters.showCompleted ? '' : 'btn-outline'}" onclick="App.logic.toggleItemsFilter()">
+                                ${App.state.viewFilters.showCompleted ? '👁️ Ocultar Hechos' : '👁️ Mostrar Hechos'}
+                            </button>
+                            ${App.state.selectedMeetingId ? `<button class="btn btn-outline" onclick="App.logic.copyMeetingAgenda('${App.state.selectedMeetingId}')">📋 Copiar Agenda</button>` : ''}
+                        </div>
+                    `;
+                    App.ui.renderItems();
+                } else if (App.state.activeView === 'board') {
+                    App.ui.renderBoard();
+                } else if (App.state.activeView === 'report') {
+                    App.ui.renderReport();
+                } else if (App.state.activeView === 'settings') {
+                    App.ui.renderSettings();
+                } else {
+                    App.ui.renderDashboard();
+                }
+            },
+
+
+            ui: {
+                renderDashboard() {
+                    const activeItems = App.state.items.filter(i => !i.deleted);
+                    const activeMeetings = App.state.meetings.filter(m => !m.deleted);
+                    const stats = {
+                        open: activeItems.filter(i => i.status === 'En Espera').length,
+                        progress: activeItems.filter(i => i.status === 'WIP').length,
+                        meetings: activeMeetings.length
+                    };
+                    document.getElementById('view-dashboard').innerHTML = `
+                        <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 2rem; margin-bottom: 3rem;">
+                            <div class="card">
+                                <h3 style="color:var(--text-dim); font-size:0.8rem; text-transform:uppercase; letter-spacing:0.1em">Total Reuniones</h3>
+                                <p style="font-size:2.5rem; font-weight:700; margin-top:0.5rem">${stats.meetings}</p>
+                            </div>
+                            <div class="card">
+                                <h3 style="color:var(--text-dim); font-size:0.8rem; text-transform:uppercase; letter-spacing:0.1em">Acciones Abiertas</h3>
+                                <p style="font-size:2.5rem; font-weight:700; margin-top:0.5rem; color:var(--primary)">${stats.open}</p>
+                            </div>
+                            <div class="card">
+                                <h3 style="color:var(--text-dim); font-size:0.8rem; text-transform:uppercase; letter-spacing:0.1em">En Curso</h3>
+                                <p style="font-size:2.5rem; font-weight:700; margin-top:0.5rem; color:var(--secondary)">${stats.progress}</p>
+                            </div>
+                        </div>
+                        <h2 style="font-size:1.25rem; margin-bottom:1.5rem; font-weight:600">Reuniones Recientes</h2>
+                        <div id="recent-meetings-list" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap:1.5rem">
+                            ${activeMeetings.slice(0, 6).map(m => `
+                                <div class="card" onclick="App.router('items', '${m.id}')">
+                                    <div style="display:flex; justify-content:space-between; align-items:flex-start">
+                                        <div>
+                                            <h4 style="font-size:1.1rem">${m.title}</h4>
+                                            <p style="color:var(--text-dim); font-size:0.85rem; margin-top:0.5rem">${m.date}</p>
+                                        </div>
+                                        <span style="background:rgba(255,255,255,0.05); padding:4px 8px; border-radius:4px; font-size:0.7rem; font-weight:600">${m.type}</span>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                },
+
+                renderMeetings() {
+                    const list = document.getElementById('view-meetings');
+                    const activeMeetings = App.state.meetings.filter(m => !m.deleted);
+                    list.innerHTML = `<div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem;">
+                        ${activeMeetings.map(m => `
+                            <div class="card" onclick="App.router('items', '${m.id}')">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem">
+                                    <span style="font-size:0.75rem; color:var(--text-dim)">${m.date}</span>
+                                    <div style="display:flex; gap:8px; align-items:center">
+                                        <span style="background:rgba(76, 215, 246, 0.1); color:var(--primary); padding:2px 8px; border-radius:4px; font-size:0.7rem; font-weight:600">${m.type}</span>
+                                        <button class="btn btn-outline" style="padding: 2px 6px; border-color: transparent; font-size: 0.8rem; height: 24px" onclick="event.stopPropagation(); App.logic.deleteMeeting('${m.id}')" title="Eliminar reunión">🗑️</button>
+                                    </div>
+                                </div>
+                                <h3 style="font-size:1.2rem; line-height:1.4">${m.title}</h3>
+                            </div>
+                        `).join('')}
+                    </div>`;
+                },
+
+                renderItems() {
+                    const list = document.getElementById('view-items');
+                    let filtered = App.state.items.filter(i => !i.deleted);
+                    
+                    if (App.state.selectedMeetingId) {
+                        filtered = filtered.filter(i => i.meetingId === App.state.selectedMeetingId);
+                        const m = App.state.meetings.find(m => m.id === App.state.selectedMeetingId);
+                        document.getElementById('view-title').innerText = (m ? m.title : "Items");
+                    }
+
+                    // Apply Visibility Filter
+                    if (App.state.viewFilters && !App.state.viewFilters.showCompleted) {
+                        filtered = filtered.filter(i => i.status !== 'Hecha' && i.status !== 'Cancelada');
+                    }
+
+                    // Sort Logic: Status (En Espera, WIP, Hecha, Cancelada) then Priority (High, Med, Low)
+                    const statusOrder = { 'En Espera': 0, 'WIP': 1, 'Hecha': 2, 'Cancelada': 3 };
+                    const priorityOrder = { 'High': 0, 'Medium': 1, 'Low': 2 };
+
+                    filtered.sort((a, b) => {
+                        const statusDiff = (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9);
+                        if (statusDiff !== 0) return statusDiff;
+                        return (priorityOrder[a.priority] ?? 9) - (priorityOrder[b.priority] ?? 9);
+                    });
+
+                    list.innerHTML = `
+                        <table class="items-table">
+                            <thead><tr><th style="padding-left:1.5rem">Asunto / Acción</th><th>PIC</th><th>Prioridad</th><th>Estado</th><th>Fecha TGT</th><th style="text-align:right">Acciones</th></tr></thead>
+                            <tbody>${filtered.map(i => {
+                                const isGhost = i.status === 'Hecha' || i.status === 'Cancelada';
+                                return `
+                                <tr style="cursor:pointer; opacity: ${isGhost ? '0.4' : '1'}; filter: ${isGhost ? 'grayscale(0.6)' : 'none'}" onclick="App.ui.showEditItem('${i.id}')">
+                                    <td style="padding-left:1.5rem">
+                                        <div style="font-weight:600; font-size:1.05rem; margin-bottom:0.4rem; ${isGhost ? 'text-decoration: line-through' : ''}">${i.todo}</div>
+                                        <div style="font-size:0.8rem; color:var(--text-dim)">${i.segment} • Solicitado por ${i.requestor}</div>
+                                        ${i.situation ? `<div style="font-size:0.75rem; color:var(--secondary); margin-top:0.5rem; font-style:italic">💬 ${i.situation}</div>` : ''}
+                                    </td>
+                                    <td>
+                                        <div style="display:flex; gap:4px; flex-wrap:wrap">
+                                            ${i.pic.map(p => `<span style="background:rgba(255,255,255,0.08); padding:4px 8px; border-radius:6px; font-size:0.8rem">${p}</span>`).join('')}
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span class="priority-pill" style="
+                                            background: ${i.priority==='High'?'rgba(255,180,171,0.15)':i.priority==='Medium'?'rgba(245,158,11,0.15)':'rgba(60,221,199,0.15)'};
+                                            color: ${i.priority==='High'?'var(--priority-high)':i.priority==='Medium'?'var(--priority-med)':'var(--priority-low)'};
+                                            border: 1px solid ${i.priority==='High'?'rgba(255,180,171,0.3)':i.priority==='Medium'?'rgba(245,158,11,0.3)':'rgba(60,221,199,0.3)'}
+                                        ">${i.priority}</span>
+                                    </td>
+                                    <td onclick="event.stopPropagation()">
+                                        <div class="status-pill" onclick="App.logic.cycleStatus('${i.id}')">
+                                            <span style="width:8px; height:8px; border-radius:50%; background:${
+                                                i.status==='En Espera'?'var(--status-espera)':i.status==='WIP'?'var(--status-wip)':i.status==='Hecha'?'var(--status-hecha)':'var(--status-cancelada)'
+                                            }; box-shadow: 0 0 6px ${
+                                                i.status==='En Espera'?'var(--status-espera)':i.status==='WIP'?'var(--status-wip)':i.status==='Hecha'?'var(--status-hecha)':'var(--status-cancelada)'
+                                            }"></span>
+                                            ${i.status}
+                                        </div>
+                                        ${i.updateDate ? `<div style="font-size:0.65rem; color:var(--text-dim); margin-top:0.4rem; text-align:center">Act: ${i.updateDate}</div>` : ''}
+                                    </td>
+                                    <td style="color:${(() => {
+                                        if (i.status === 'Hecha' || !i.tgtEndDate) return 'inherit';
+                                        const tgt = new Date(i.tgtEndDate);
+                                        const now = new Date();
+                                        if (tgt < now) return 'var(--priority-high)'; // Overdue
+                                        if ((tgt - now) / (1000 * 60 * 60 * 24) <= 3) return 'var(--priority-med)'; // Urgent (within 3 days)
+                                        return 'inherit';
+                                    })()}; font-weight:600">
+                                        ${i.tgtEndDate || '—'}
+                                    </td>
+                                    <td style="text-align:right" onclick="event.stopPropagation()">
+                                        <button class="btn btn-outline" style="padding: 6px 10px; border-color: transparent; color: var(--priority-high)" onclick="App.logic.deleteItem('${i.id}')" title="Eliminar item">🗑️</button>
+                                    </td>
+                                </tr>
+                                `;
+                            }).join('')}</tbody>
+                        </table>
+                    `;
+                },
+
+                renderBoard() {
+                    const board = document.getElementById('view-board');
+                    const members = [...App.state.settings.teamMembers].sort().concat("ALL");
+                    const activeItems = App.state.items.filter(i => !i.deleted);
+                    board.innerHTML = `<div class="board-container">
+                        ${members.map(member => {
+                            const items = activeItems.filter(i => i.pic.includes(member) && i.status !== 'Hecha' && i.status !== 'Cancelada');
+                            if (items.length === 0) return '';
+                            return `<div class="board-col">
+                                <h3><span>${member}</span> <span style="background:rgba(255,255,255,0.05); padding:2px 8px; border-radius:1rem; font-size:0.75rem">${items.length}</span></h3>
+                                ${items.map(i => {
+                                    const isOverdue = i.status !== 'Hecha' && i.status !== 'Cancelada' && i.tgtEndDate && new Date(i.tgtEndDate) < new Date();
+                                    return `
+                                    <div class="card" onclick="App.ui.showEditItem('${i.id}')" style="${isOverdue ? 'border: 1px solid var(--priority-high); box-shadow: 0 0 12px rgba(255,180,171,0.1)' : ''}">
+                                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem">
+                                            <span style="font-size:0.7rem; color:var(--text-dim)">#${i.id.slice(2, 8)}</span>
+                                            <span style="color:${i.priority==='High'?'var(--priority-high)':i.priority==='Medium'?'var(--priority-med)':'var(--priority-low)'}; font-size:0.7rem; font-weight:700; text-transform:uppercase">${i.priority}</span>
+                                        </div>
+                                        <p style="font-weight:600; line-height:1.4; margin-bottom:1rem">${i.todo}</p>
+                                        ${i.situation ? `<div style="font-size:0.7rem; color:var(--text-dim); background:rgba(255,255,255,0.03); padding:0.5rem; border-radius:6px; margin-bottom:1rem"><em>${i.situation}</em></div>` : ''}
+                                        <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid var(--border); padding-top:1rem; margin-top:1rem">
+                                            <span style="font-size:0.75rem; color:var(--text-dim)">${App.state.meetings.find(m => m.id === i.meetingId)?.type || ''}</span>
+                                            <span style="font-size:0.75rem; color:${isOverdue ? 'var(--priority-high)' : 'var(--text-dim)'}; font-weight:600">${i.tgtEndDate || ''}</span>
+                                        </div>
+                                    </div>
+                                    `;
+                                }).join('')}
+                            </div>`;
+                        }).join('')}
+                    </div>`;
+                },
+
+                renderReport() {
+                    const view = document.getElementById('view-report');
+                    const activeItems = App.state.items.filter(i => !i.deleted);
+                    const members = [...App.state.settings.teamMembers].sort().concat("ALL");
+                    const statuses = ['En Espera', 'WIP', 'Hecha', 'Cancelada'];
+                    
+                    const filterPIC = App.state.reportFilters.pic;
+                    const filterStatus = App.state.reportFilters.status;
+
+                    let filtered = activeItems;
+                    if (filterPIC !== 'ALL_MEMBERS') filtered = filtered.filter(i => i.pic.includes(filterPIC));
+                    if (filterStatus !== 'ALL_STATUS') filtered = filtered.filter(i => i.status === filterStatus);
+
+                    view.innerHTML = `
+                        <div class="card" style="margin-bottom:2rem; display:flex; gap:1.5rem; flex-wrap:wrap">
+                            <div class="form-group" style="margin:0; flex:1; min-width:200px">
+                                <label style="font-size:0.75rem; color:var(--text-dim)">FILTRAR POR PERSONA</label>
+                                <select style="width:100%" onchange="App.logic.updateReportFilter('pic', this.value)">
+                                    <option value="ALL_MEMBERS">Todos los Responsables</option>
+                                    ${members.map(m => `<option value="${m}" ${m===filterPIC?'selected':''}>${m}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div class="form-group" style="margin:0; flex:1; min-width:200px">
+                                <label style="font-size:0.75rem; color:var(--text-dim)">FILTRAR POR ESTADO</label>
+                                <select style="width:100%" onchange="App.logic.updateReportFilter('status', this.value)">
+                                    <option value="ALL_STATUS">Todos los Estados</option>
+                                    ${statuses.map(s => `<option value="${s}" ${s===filterStatus?'selected':''}>${s}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div style="flex:2; display:flex; justify-content:flex-end; align-items:center">
+                                <span style="font-size:0.8rem; color:var(--text-dim)">Mostrando <strong>${filtered.length}</strong> tareas</span>
+                            </div>
+                        </div>
+                        
+                        <div class="card" style="padding:0; overflow:hidden">
+                            <table class="items-table" style="margin:0">
+                                <thead><tr><th style="padding-left:2rem">Responsable</th><th>Asunto / Acción</th><th>Estado</th><th>Fecha TGT</th></tr></thead>
+                                <tbody>${filtered.length ? filtered.map(i => `
+                                    <tr style="cursor:pointer" onclick="App.ui.showEditItem('${i.id}')">
+                                        <td style="padding-left:2rem">
+                                            ${i.pic.map(p => `<div style="font-size:0.9rem; font-weight:600">${p}</div>`).join('')}
+                                        </td>
+                                        <td>
+                                            <div style="font-weight:600; line-height:1.4">${i.todo}</div>
+                                            <div style="font-size:0.7rem; color:var(--text-dim); margin-top:0.25rem">${i.segment} • ${App.state.meetings.find(m => m.id === i.meetingId)?.title || 'Sin reunión'}</div>
+                                            ${i.situation ? `<div style="font-size:0.7rem; color:var(--primary); margin-top:0.4rem">${i.situation}</div>` : ''}
+                                        </td>
+                                        <td>
+                                            <span style="font-size:0.8rem; font-weight:700; color:${
+                                                i.status==='En Espera'?'var(--status-espera)':i.status==='WIP'?'var(--status-wip)':i.status==='Hecha'?'var(--status-hecha)':'var(--status-cancelada)'
+                                            }">${i.status}</span>
+                                            ${i.updateDate ? `<div style="font-size:0.6rem; opacity:0.6">U: ${i.updateDate}</div>` : ''}
+                                        </td>
+                                        <td style="font-weight:600">${i.tgtEndDate || '—'}</td>
+                                    </tr>
+                                `).join('') : '<tr><td colspan="4" style="text-align:center; padding:3rem; color:var(--text-dim)">No se encontraron tareas con estos filtros.</td></tr>'}</tbody>
+                            </table>
+                        </div>
+                    `;
+                },
+
+                renderSettings() {
+                    const picsList = document.getElementById('settings-pics-list');
+                    const segmentsList = document.getElementById('settings-segments-list');
+                    
+                    picsList.innerHTML = [...App.state.settings.teamMembers].sort().map(m => `
+                        <div class="status-pill">
+                            ${m}
+                            <span style="margin-left:8px; opacity:0.5; cursor:pointer" onclick="App.logic.removePIC('${m}')">×</span>
+                        </div>
+                    `).join('');
+                    
+                    segmentsList.innerHTML = [...App.state.settings.segments].sort().map(s => `
+                        <div class="status-pill">
+                            ${s}
+                            <span style="margin-left:8px; opacity:0.5; cursor:pointer" onclick="App.logic.removeSegment('${s}')">×</span>
+                        </div>
+                    `).join('');
+                },
+
+                showNewMeeting() {
+                    const modal = document.getElementById('modal-overlay');
+                    const content = document.getElementById('modal-content');
+                    content.innerHTML = `
+                        <h2>Nueva Reunión</h2>
+                        <form onsubmit="App.logic.createMeeting(event)">
+                            <div class="form-group"><label>Título</label><input type="text" id="m-title" required></div>
+                            <div class="form-group"><label>Tipo</label>
+                                <select id="m-type"><option>Stock</option><option>Project</option><option>Weekly</option><option>Internal</option><option>WoW</option><option>PR</option><option>Other</option></select>
+                            </div>
+                            <div class="form-group"><label>Fecha</label><input type="date" id="m-date" value="${new Date().toISOString().split('T')[0]}" onclick="this.showPicker()"></div>
+                            <div style="display:flex; justify-content:flex-end; gap:1rem">
+                                <button type="button" class="btn btn-outline" onclick="App.ui.hideModal()">Cancelar</button>
+                                <button type="submit" class="btn">Guardar</button>
+                            </div>
+                        </form>
+                    `;
+                    modal.style.display = 'flex';
+                },
+
+                showNewItem() {
+                    const modal = document.getElementById('modal-overlay');
+                    const content = document.getElementById('modal-content');
+                    content.classList.add('wide');
+                    const m_opts = App.state.meetings.map(m => `<option value="${m.id}" ${m.id === App.state.selectedMeetingId ? 'selected' : ''}>${m.title}</option>`).join('');
+                    const p_opts = [...App.state.settings.teamMembers].sort().map(t => `<option>${t}</option>`).join('') + '<option>ALL</option>';
+                    const s_opts = [...App.state.settings.segments].sort().map(s => `<option>${s}</option>`).join('');
+                    
+                    content.innerHTML = `
+                        <h2 style="margin-bottom:2rem">Nuevo Item (Acción)</h2>
+                        <form onsubmit="App.logic.createItem(event)">
+                            <div class="form-grid">
+                                <div>
+                                    <div class="form-group"><label>Descripción del To-Do</label><textarea id="i-todo" required minlength="5" style="height:120px; font-size:1.1rem; line-height:1.4" placeholder="¿Qué hay que hacer?"></textarea></div>
+                                    <div class="form-group"><label>Situación / Evolución Actual</label><textarea id="i-situation" placeholder="Describe brevemente la situación actual..." style="height:120px"></textarea></div>
+                                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1.5rem">
+                                        <div class="form-group"><label>Segmento</label><select id="i-segment" style="width:100%">${s_opts}</select></div>
+                                        <div class="form-group"><label>Solicitado Por</label><input type="text" id="i-requestor" value="${App.state.settings.defaultRequestor || 'Javier Garcés'}" style="width:100%"></div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div class="form-group"><label>Reunión Asociada</label><select id="i-meeting" required style="width:100%">${m_opts}</select></div>
+                                    <div class="form-group"><label>Responsable (PIC)</label><select id="i-pic" multiple style="height:115px; width:100%" required>${p_opts}</select></div>
+                                    
+                                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1.5rem">
+                                        <div class="form-group"><label>Prioridad</label><select id="i-priority" style="width:100%"><option>Low</option><option>Medium</option><option selected>High</option></select></div>
+                                        <div class="form-group"><label>Estado</label><select id="i-status" style="width:100%">
+                                            <option selected>En Espera</option>
+                                            <option>WIP</option>
+                                            <option>Hecha</option>
+                                            <option>Cancelada</option>
+                                        </select></div>
+                                    </div>
+                                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1.5rem">
+                                        <div class="form-group"><label>Vencimiento (TGT)</label><input type="date" id="i-tgt" onclick="this.showPicker()" style="width:100%"></div>
+                                        <div class="form-group"><label>Fecha Seguimiento</label><input type="date" id="i-update-date" value="${new Date().toISOString().split('T')[0]}" onclick="this.showPicker()" style="width:100%"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="display:flex; justify-content:flex-end; gap:1.5rem; margin-top:2rem; border-top:1px solid var(--border); padding-top:2rem">
+                                <button type="button" class="btn btn-outline" onclick="App.ui.hideModal()">Cancelar</button>
+                                <button type="submit" class="btn" style="min-width:180px">Crear Item</button>
+                            </div>
+                        </form>
+                    `;
+                    modal.style.display = 'flex';
+                },
+
+                showEditItem(id) {
+                    const item = App.state.items.find(i => i.id === id);
+                    if (!item) return;
+
+                    const modal = document.getElementById('modal-overlay');
+                    const content = document.getElementById('modal-content');
+                    content.classList.add('wide');
+                    const m_opts = App.state.meetings.map(m => `<option value="${m.id}" ${m.id === item.meetingId ? 'selected' : ''}>${m.title}</option>`).join('');
+                    const p_opts = [...App.state.settings.teamMembers].sort().map(t => `<option ${item.pic.includes(t) ? 'selected' : ''}>${t}</option>`).join('') + (item.pic.includes('ALL') ? '<option selected>ALL</option>' : '<option>ALL</option>');
+                    const s_opts = [...App.state.settings.segments].sort().map(s => `<option ${s === item.segment ? 'selected' : ''}>${s}</option>`).join('');
+                    
+                    content.innerHTML = `
+                        <h2 style="margin-bottom:2rem">Editar Item</h2>
+                        <form onsubmit="App.logic.updateItem(event, '${item.id}')">
+                            <div class="form-grid">
+                                <div>
+                                    <div class="form-group"><label>Descripción del To-Do</label><textarea id="i-todo" required minlength="5" style="height:120px; font-size:1.1rem; line-height:1.4">${item.todo}</textarea></div>
+                                    <div class="form-group"><label>Situación / Evolución Actual</label><textarea id="i-situation" placeholder="Describe brevemente la situación actual..." style="height:120px">${item.situation || ''}</textarea></div>
+                                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1.5rem">
+                                        <div class="form-group"><label>Segmento</label><select id="i-segment" style="width:100%">${s_opts}</select></div>
+                                        <div class="form-group"><label>Solicitado Por</label><input type="text" id="i-requestor" value="${item.requestor}" style="width:100%"></div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div class="form-group"><label>Reunión Asociada</label><select id="i-meeting" required style="width:100%">${m_opts}</select></div>
+                                    <div class="form-group"><label>Responsable (PIC)</label><select id="i-pic" multiple style="height:115px; width:100%" required>${p_opts}</select></div>
+                                    
+                                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1.5rem">
+                                        <div class="form-group"><label>Prioridad</label><select id="i-priority" style="width:100%">
+                                            <option ${item.priority==='Low'?'selected':''}>Low</option>
+                                            <option ${item.priority==='Medium'?'selected':''}>Medium</option>
+                                            <option ${item.priority==='High'?'selected':''}>High</option>
+                                        </select></div>
+                                        <div class="form-group"><label>Estado</label><select id="i-status" style="width:100%">
+                                            <option ${item.status==='En Espera'?'selected':''}>En Espera</option>
+                                            <option ${item.status==='WIP'?'selected':''}>WIP</option>
+                                            <option ${item.status==='Hecha'?'selected':''}>Hecha</option>
+                                            <option ${item.status==='Cancelada'?'selected':''}>Cancelada</option>
+                                        </select></div>
+                                    </div>
+                                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1.5rem">
+                                        <div class="form-group"><label>Vencimiento (TGT)</label><input type="date" id="i-tgt" value="${item.tgtEndDate || ''}" onclick="this.showPicker()" style="width:100%"></div>
+                                        <div class="form-group"><label>Fecha Seguimiento</label><input type="date" id="i-update-date" value="${item.updateDate || new Date().toISOString().split('T')[0]}" onclick="this.showPicker()" style="width:100%"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="display:flex; justify-content:flex-end; gap:1.5rem; margin-top:2rem; border-top:1px solid var(--border); padding-top:2rem">
+                                <button type="button" class="btn btn-outline" onclick="App.ui.hideModal()">Cancelar</button>
+                                <button type="submit" class="btn" style="min-width:180px">Guardar Cambios</button>
+                            </div>
+                        </form>
+                    `;
+                    modal.style.display = 'flex';
+                },
+
+                hideModal() { 
+                    const content = document.getElementById('modal-content');
+                    content.classList.remove('wide');
+                    document.getElementById('modal-overlay').style.display = 'none'; 
+                }
+            },
+
+            logic: {
+                createMeeting(e) {
+                    e.preventDefault();
+                    const now = new Date().toISOString();
+                    const m = {
+                        id: 'm-' + crypto.randomUUID(),
+                        title: document.getElementById('m-title').value,
+                        type: document.getElementById('m-type').value,
+                        date: document.getElementById('m-date').value,
+                        createdAt: now,
+                        updatedAt: now
+                    };
+                    App.state.meetings.unshift(m);
+                    App.db.scheduleSave();
+                    App.ui.hideModal();
+                    App.router('meetings');
+                },
+
+                deleteMeeting(id) {
+                    if (confirm('¿Estás seguro de que quieres eliminar esta reunión? Esto no borrará sus items, pero dejarán de ser visibles en esta reunión.')) {
+                        const meeting = App.state.meetings.find(m => m.id === id);
+                        if (meeting) {
+                            meeting.deleted = true;
+                            meeting.updatedAt = new Date().toISOString();
+                            App.db.scheduleSave();
+                            App.render();
+                        }
+                    }
+                },
+
+                createItem(e) {
+                    e.preventDefault();
+                    const picSelect = document.getElementById('i-pic');
+                    const pics = Array.from(picSelect.selectedOptions).map(o => o.value);
+                    const now = new Date().toISOString();
+                    const item = {
+                        id: 'i-' + crypto.randomUUID(),
+                        meetingId: document.getElementById('i-meeting').value,
+                        todo: document.getElementById('i-todo').value,
+                        segment: document.getElementById('i-segment').value,
+                        pic: pics,
+                        priority: document.getElementById('i-priority').value,
+                        status: document.getElementById('i-status').value,
+                        tgtEndDate: document.getElementById('i-tgt').value,
+                        updateDate: document.getElementById('i-update-date').value,
+                        situation: document.getElementById('i-situation').value,
+                        inputDate: new Date().toISOString().split('T')[0],
+                        requestor: document.getElementById('i-requestor').value,
+                        createdAt: now,
+                        updatedAt: now
+                    };
+                    App.state.items.unshift(item);
+                    App.db.scheduleSave();
+                    App.ui.hideModal();
+                    App.render();
+                },
+
+                updateItem(e, id) {
+                    e.preventDefault();
+                    const item = App.state.items.find(i => i.id === id);
+                    if (!item) return;
+
+                    const picSelect = document.getElementById('i-pic');
+                    const pics = Array.from(picSelect.selectedOptions).map(o => o.value);
+                    
+                    item.meetingId = document.getElementById('i-meeting').value;
+                    item.todo = document.getElementById('i-todo').value;
+                    item.segment = document.getElementById('i-segment').value;
+                    item.pic = pics;
+                    item.priority = document.getElementById('i-priority').value;
+                    item.status = document.getElementById('i-status').value;
+                    item.tgtEndDate = document.getElementById('i-tgt').value;
+                    item.updateDate = document.getElementById('i-update-date').value;
+                    item.situation = document.getElementById('i-situation').value;
+                    item.requestor = document.getElementById('i-requestor').value;
+                    item.updatedAt = new Date().toISOString();
+
+                    App.db.scheduleSave();
+                    App.ui.hideModal();
+                    App.render();
+                },
+
+                deleteItem(id) {
+                    if (confirm('¿Estás seguro de que quieres eliminar este item?')) {
+                        const item = App.state.items.find(i => i.id === id);
+                        if (item) {
+                            item.deleted = true;
+                            item.updatedAt = new Date().toISOString();
+                            App.db.scheduleSave();
+                            App.render();
+                        }
+                    }
+                },
+
+                cycleStatus(id) {
+                    const item = App.state.items.find(i => i.id === id);
+                    if (!item) return;
+                    
+                    // Business rule: terminal states cannot change
+                    if (item.status === 'Hecha' || item.status === 'Cancelada') {
+                        console.log("No se puede cambiar el estado de un item finalizado o cancelado.");
+                        return;
+                    }
+
+                    const states = ['En Espera', 'WIP', 'Hecha', 'Cancelada'];
+                    let nextIdx = (states.indexOf(item.status) + 1) % states.length;
+                    item.status = states[nextIdx];
+                    item.updatedAt = new Date().toISOString();
+                    App.db.scheduleSave();
+                    App.render();
+                },
+
+                addPIC() {
+                    const input = document.getElementById('new-pic-name');
+                    const name = input.value.trim();
+                    if (name && !App.state.settings.teamMembers.includes(name)) {
+                        App.state.settings.teamMembers.push(name);
+                        App.state.settings.updatedAt = new Date().toISOString();
+                        input.value = '';
+                        App.db.scheduleSave();
+                        App.ui.renderSettings();
+                    }
+                },
+
+                removePIC(name) {
+                    App.state.settings.teamMembers = App.state.settings.teamMembers.filter(m => m !== name);
+                    App.state.settings.updatedAt = new Date().toISOString();
+                    App.db.scheduleSave();
+                    App.ui.renderSettings();
+                },
+
+                addSegment() {
+                    const input = document.getElementById('new-segment-name');
+                    const name = input.value.trim();
+                    if (name && !App.state.settings.segments.includes(name)) {
+                        App.state.settings.segments.push(name);
+                        App.state.settings.updatedAt = new Date().toISOString();
+                        input.value = '';
+                        App.db.scheduleSave();
+                        App.ui.renderSettings();
+                    }
+                },
+
+                removeSegment(name) {
+                    App.state.settings.segments = App.state.settings.segments.filter(s => s !== name);
+                    App.state.settings.updatedAt = new Date().toISOString();
+                    App.db.scheduleSave();
+                    App.ui.renderSettings();
+                },
+
+                updateReportFilter(key, val) {
+                    App.state.reportFilters[key] = val;
+                    App.ui.renderReport();
+                },
+
+                toggleItemsFilter() {
+                    App.state.viewFilters.showCompleted = !App.state.viewFilters.showCompleted;
+                    App.render();
+                },
+
+                copyMeetingAgenda(id) {
+                    const m = App.state.meetings.find(m => m.id === id);
+                    if (!m) return;
+                    const items = App.state.items.filter(i => i.meetingId === id && !i.deleted && i.status !== 'Hecha' && i.status !== 'Cancelada');
+                    
+                    if (items.length === 0) {
+                        alert("No hay items activos (En Espera o WIP) en esta reunión para copiar.");
+                        return;
+                    }
+                    
+                    const titleStr = `${m.title} (${m.type}) - ${m.date}`;
+                    
+                    const html = `
+                        <div style="font-family: -apple-system, Segoe UI, Roboto, sans-serif; max-width: 600px; color: #1e293b;">
+                            <h1 style="color: #4cd7f6; font-size: 24px; margin-bottom: 2rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 1rem;">${titleStr}</h1>
+                            
+                            <table style="width: 100%; border-collapse: collapse;">
+                                <thead>
+                                    <tr style="background: #f8fafc; text-align: left;">
+                                        <th style="padding: 12px; border-bottom: 2px solid #e2e8f0;">Acción / To-Do</th>
+                                        <th style="padding: 12px; border-bottom: 2px solid #e2e8f0;">Responsable</th>
+                                        <th style="padding: 12px; border-bottom: 2px solid #e2e8f0;">Estado</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${items.map(i => `
+                                        <tr>
+                                            <td style="padding: 12px; border-bottom: 1px solid #e2e8f0;">
+                                                <div style="font-weight: 600;">${i.todo}</div>
+                                                <div style="font-size: 12px; color: #64748b;">${i.segment}</div>
+                                                ${i.situation ? `<div style="font-size: 11px; color: #4cd7f6; margin-top: 4px; font-style: italic;">Evolution: ${i.situation}</div>` : ''}
+                                            </td>
+                                            <td style="padding: 12px; border-bottom: 1px solid #e2e8f0; vertical-align: top;">${i.pic.join(', ')}</td>
+                                            <td style="padding: 12px; border-bottom: 1px solid #e2e8f0; vertical-align: top;">
+                                                <span style="padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: 700; background: #e2e8f0;">${i.status}</span>
+                                            </td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                            <p style="margin-top: 2rem; font-size: 11px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 1rem;">Generado desde DAL Manager</p>
+                        </div>
+                    `;
+
+                    const plainText = `REUNIÓN: ${titleStr}\n\n` + 
+                        items.map(i => `• ${i.todo.toUpperCase()}\n  └ Responsable: ${i.pic.join(', ')}\n  └ Estado: ${i.status}\n  └ TGT: ${i.tgtEndDate || '-'}`).join('\n\n');
+
+                    const blobHtml = new Blob([html], { type: 'text/html' });
+                    const blobText = new Blob([plainText], { type: 'text/plain' });
+
+                    try {
+                        const data = [new ClipboardItem({ 'text/html': blobHtml, 'text/plain': blobText })];
+                        navigator.clipboard.write(data).then(() => {
+                            const btn = event.currentTarget;
+                            const original = btn.innerText;
+                            btn.innerText = '✅ ¡Copiado!';
+                            btn.style.color = 'var(--priority-low)';
+                            setTimeout(() => { 
+                                btn.innerText = original;
+                                btn.style.color = '';
+                            }, 2000);
+                        });
+                    } catch (e) {
+                        navigator.clipboard.writeText(plainText).then(() => alert("Copiado en texto plano (el navegador no soporta texto enriquecido aquí)"));
+                    }
+                }
+            }
+        };
+
+        // Init
+        document.getElementById('btn-folder').onclick = () => App.db.init();
+        
+        // Start persistent handle check
+        App.db.startup();
+        App.render();
+    </script>
+</body>
+</html>
