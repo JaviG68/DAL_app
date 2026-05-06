@@ -7,6 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
     <style>
         :root {
             --bg-deep: #0b1326;
@@ -546,7 +547,8 @@
                             <button class="btn ${!App.state.viewFilters.showCompleted ? '' : 'btn-outline'}" onclick="App.logic.toggleItemsFilter()">
                                 ${App.state.viewFilters.showCompleted ? '👁️ Ocultar Hechos' : '👁️ Mostrar Hechos'}
                             </button>
-                            ${App.state.selectedMeetingId ? `<button class="btn btn-outline" onclick="App.logic.copyMeetingAgenda('${App.state.selectedMeetingId}')">📋 Copiar Agenda</button>` : ''}
+                            ${App.state.selectedMeetingId ? `<button class="btn btn-outline" onclick="App.logic.copyMeetingAgenda('${App.state.selectedMeetingId}')">📋 Copiar Agenda</button>
+                            <button class="btn btn-outline" onclick="App.logic.exportMeetingExcel('${App.state.selectedMeetingId}')">📊 Exportar Excel</button>` : ''}
                         </div>
                     `;
                     App.ui.renderItems();
@@ -1169,6 +1171,85 @@
                     } catch (e) {
                         navigator.clipboard.writeText(plainText).then(() => alert("Copiado en texto plano (el navegador no soporta texto enriquecido aquí)"));
                     }
+                },
+
+                exportMeetingExcel(id) {
+                    if (typeof ExcelJS === 'undefined') {
+                        alert("La librería de exportación a Excel está cargando. Comprueba tu conexión a internet.");
+                        return;
+                    }
+                    
+                    const m = App.state.meetings.find(m => m.id === id);
+                    if (!m) return;
+                    const items = App.state.items.filter(i => i.meetingId === id && !i.deleted);
+                    
+                    if (items.length === 0) {
+                        alert("No hay items activos en esta reunión para exportar.");
+                        return;
+                    }
+
+                    const workbook = new ExcelJS.Workbook();
+                    const sheet = workbook.addWorksheet('Reunión', {
+                        views: [{ state: 'frozen', ySplit: 2 }]
+                    });
+
+                    sheet.columns = [
+                        { width: 8 },  { width: 16 }, { width: 19 }, { width: 16 }, 
+                        { width: 17 }, { width: 82 }, { width: 19 }, { width: 15 }, 
+                        { width: 13 }, { width: 19 }, { width: 18 }, { width: 39 }
+                    ];
+
+                    const row1 = sheet.addRow(['INPUT', '', '', '', '', '', '', '', 'OUTPUT', '', '', '']);
+                    row1.height = 20;
+                    
+                    row1.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF000000' } };
+                    row1.getCell(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+                    
+                    row1.getCell(9).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF000000' } };
+                    row1.getCell(9).font = { bold: true, color: { argb: 'FFFFFF00' } };
+
+                    const headers = ['ID #', 'Input Date', 'Meeting Type', 'Segment', 'Requestor', 'To Do / Comment', 'PIC', 'Priority', 'Status', 'TGT End Date', 'Update Date', 'Situation'];
+                    const row2 = sheet.addRow(headers);
+                    row2.height = 25;
+
+                    row2.eachCell((cell, colNumber) => {
+                        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E78' } }; 
+                        cell.font = { bold: true, color: { argb: colNumber >= 9 ? 'FFFFFF00' : 'FFFFFFFF' } };
+                        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+                        cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
+                    });
+
+                    items.forEach((i, index) => {
+                        let statusText = i.status;
+                        if (statusText === 'Hecha') statusText = 'Done';
+                        if (statusText === 'WIP') statusText = 'In progress';
+                        if (statusText === 'En Espera') statusText = 'Pending';
+                        if (statusText === 'Cancelada') statusText = 'Cancelled';
+
+                        const dataRow = sheet.addRow([
+                            index + 1, i.inputDate || m.date, m.type, i.segment, i.requestor || '',
+                            i.todo, i.pic.join(' / '), i.priority, statusText, i.tgtEndDate || '', i.updateDate || '', i.situation || ''
+                        ]);
+
+                        dataRow.eachCell((cell, colNumber) => {
+                            cell.alignment = { vertical: 'top', wrapText: true };
+                            cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
+                            if ([1, 2, 3, 4, 7, 8, 9, 10, 11].includes(colNumber)) cell.alignment.horizontal = 'center';
+                        });
+                    });
+
+                    const safeTitle = m.title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+                    const fileName = `Reunion_${safeTitle}_${m.date}.xlsx`;
+
+                    workbook.xlsx.writeBuffer().then(buffer => {
+                        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                        const link = document.createElement('a');
+                        link.href = URL.createObjectURL(blob);
+                        link.download = fileName;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                    });
                 }
             }
         };
